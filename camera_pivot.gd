@@ -9,9 +9,9 @@ extends Marker3D
 @export var min_zoom: float = 15.0         # 最小缩放距离
 @export var max_zoom: float = 100.0        # 最大缩放距离
 
-# --- 鼠标边缘滚动参数（已升级为长方形判定） ---
-@export var edge_margin_x: float = 50.0    # 左右边缘的触发宽度（单位：像素）
-@export var edge_margin_y: float = 30.0    # 上下边缘的触发高度（单位：像素）由于屏幕矮，这里设小一点手感更好
+# --- 鼠标边缘滚动参数（全局显示器长方形判定） ---
+@export var edge_margin_x: float = 50.0    # 左右边缘的触发宽度（单位：物理像素）
+@export var edge_margin_y: float = 30.0    # 上下边缘的触发高度（单位：物理像素）
 @export var edge_move_speed: float = 100.0 # 鼠标移到边缘时的地图滑动速度
 
 func _process(delta: float) -> void:
@@ -31,45 +31,43 @@ func _process(delta: float) -> void:
 		input_dir.y += 1.0
 
 	# ====================================================
-	# 2. 鼠标屏幕边缘滚动驱动判定 (已升级：长方形判定)
+	# 2. 鼠标屏幕边缘滚动驱动判定 (硬件级全局追踪)
 	# ====================================================
-	# 只有当键盘没有按下时，才触发鼠标边缘滚动，防止冲突
 	if input_dir == Vector2.ZERO:
-		# 获取当前游戏窗口的实时鼠标屏幕坐标 (X, Y)
-		var mouse_pos := get_viewport().get_mouse_position()
-		# 获取当前游戏窗口的实际总大小 (宽, 高)
-		var window_size := get_viewport().get_visible_rect().size
+		# 【架构升级】：跨过游戏视口，直接索要鼠标在整台电脑屏幕上的绝对物理像素坐标 (0 ~ 1920...)
+		var global_mouse_pos := DisplayServer.mouse_get_position()
 		
-		# 【左右边缘】使用 edge_margin_x 判定
-		if mouse_pos.x < edge_margin_x and mouse_pos.x >= 0:
+		# 获取当前游戏窗口所在的那个显示器（支持多显示器）的完整物理分辨率
+		var screen_id := DisplayServer.window_get_current_screen()
+		var screen_size := DisplayServer.screen_get_size(screen_id)
+		
+		# 极其强悍的全局判定：直接用电脑屏幕的物理长方形边界作为死区
+		# 【左右显示器边缘检测】
+		if global_mouse_pos.x < edge_margin_x:
 			input_dir.x = -1.0
-		elif mouse_pos.x > (window_size.x - edge_margin_x) and mouse_pos.x <= window_size.x:
+		elif global_mouse_pos.x > (screen_size.x - edge_margin_x):
 			input_dir.x = 1.0
 			
-		# 【上下边缘】使用 edge_margin_y 判定
-		if mouse_pos.y < edge_margin_y and mouse_pos.y >= 0:
+		# 【上下显示器边缘检测】
+		if global_mouse_pos.y < edge_margin_y:
 			input_dir.y = -1.0
-		elif mouse_pos.y > (window_size.y - edge_margin_y) and mouse_pos.y <= window_size.y:
+		elif global_mouse_pos.y > (screen_size.y - edge_margin_y):
 			input_dir.y = 1.0
 
-# ====================================================
+	# ====================================================
 	# 3. 物理位移执行 (应用 3D 旋转校正)
 	# ====================================================
 	if input_dir.length() > 0:
 		input_dir = input_dir.normalized()
 		
-		# 根据当前相机的旋转朝向，计算出绝对的“前后左右”地面向量
 		var forward := Vector3(transform.basis.z.x, 0.0, transform.basis.z.z).normalized()
 		var right := Vector3(transform.basis.x.x, 0.0, transform.basis.x.z).normalized()
 		
-		# 【修复核心】：显式声明 current_speed 的类型为 float，解除编译器的类型推导危机
 		var current_speed: float = edge_move_speed
 		
-		# 判断是否有键盘按键按下，如果有，则切换为键盘速度
 		if Input.is_key_pressed(KEY_W) or Input.is_key_pressed(KEY_A) or Input.is_key_pressed(KEY_S) or Input.is_key_pressed(KEY_D) or Input.is_key_pressed(KEY_UP) or Input.is_key_pressed(KEY_DOWN) or Input.is_key_pressed(KEY_LEFT) or Input.is_key_pressed(KEY_RIGHT):
 			current_speed = move_speed
 		
-		# 此时类型绝对明确，`:=` 可以完美推导
 		var move_vec := (right * input_dir.x + forward * input_dir.y) * current_speed * delta
 		global_translate(move_vec)
 		
@@ -84,7 +82,7 @@ func _process(delta: float) -> void:
 
 func _unhandled_input(event: InputEvent) -> void:
 	# ====================================================
-	# 新增：按下 F11 键切换全屏/窗口化
+	# 5. 按下 F11 键切换全屏/窗口化
 	# ====================================================
 	if event is InputEventKey and event.pressed:
 		if event.keycode == KEY_F11:
@@ -94,7 +92,7 @@ func _unhandled_input(event: InputEvent) -> void:
 				DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_EXCLUSIVE_FULLSCREEN)
 
 	# ====================================================
-	# 5. 鼠标滚轮缩放大地图
+	# 6. 鼠标滚轮缩放大地图
 	# ====================================================
 	if event is InputEventMouseButton and event.pressed:
 		if event.button_index == MOUSE_BUTTON_WHEEL_UP:
