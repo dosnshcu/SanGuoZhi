@@ -14,6 +14,10 @@ extends Marker3D
 @export var edge_margin_y: float = 30.0    # 上下边缘的触发高度（单位：物理像素）
 @export var edge_move_speed: float = 100.0 # 鼠标移到边缘时的地图滑动速度
 
+# --- 【新增】右键拖拽平移参数 ---
+@export var drag_sensitivity: float = 0.15  # 拖拽灵敏度（根据需要调整速度正比例）
+var is_dragging: bool = false
+
 func _process(delta: float) -> void:
 	# 最终的移动方向向量（融合键盘和鼠标边缘）
 	var input_dir := Vector2.ZERO
@@ -33,22 +37,17 @@ func _process(delta: float) -> void:
 	# ====================================================
 	# 2. 鼠标屏幕边缘滚动驱动判定 (硬件级全局追踪)
 	# ====================================================
-	if input_dir == Vector2.ZERO:
-		# 【架构升级】：跨过游戏视口，直接索要鼠标在整台电脑屏幕上的绝对物理像素坐标 (0 ~ 1920...)
+	# 【优化】：如果正在右键拖拽，强制不触发边缘滚动，避免两种操作冲突
+	if input_dir == Vector2.ZERO and not is_dragging:
 		var global_mouse_pos := DisplayServer.mouse_get_position()
-		
-		# 获取当前游戏窗口所在的那个显示器（支持多显示器）的完整物理分辨率
 		var screen_id := DisplayServer.window_get_current_screen()
 		var screen_size := DisplayServer.screen_get_size(screen_id)
 		
-		# 极其强悍的全局判定：直接用电脑屏幕的物理长方形边界作为死区
-		# 【左右显示器边缘检测】
 		if global_mouse_pos.x < edge_margin_x:
 			input_dir.x = -1.0
 		elif global_mouse_pos.x > (screen_size.x - edge_margin_x):
 			input_dir.x = 1.0
 			
-		# 【上下显示器边缘检测】
 		if global_mouse_pos.y < edge_margin_y:
 			input_dir.y = -1.0
 		elif global_mouse_pos.y > (screen_size.y - edge_margin_y):
@@ -60,6 +59,7 @@ func _process(delta: float) -> void:
 	if input_dir.length() > 0:
 		input_dir = input_dir.normalized()
 		
+		# 提取当前 3D 相机在水平面上的前后、左右向量
 		var forward := Vector3(transform.basis.z.x, 0.0, transform.basis.z.z).normalized()
 		var right := Vector3(transform.basis.x.x, 0.0, transform.basis.x.z).normalized()
 		
@@ -99,3 +99,25 @@ func _unhandled_input(event: InputEvent) -> void:
 			spring_arm.spring_length = clamp(spring_arm.spring_length - zoom_speed, min_zoom, max_zoom)
 		elif event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
 			spring_arm.spring_length = clamp(spring_arm.spring_length + zoom_speed, min_zoom, max_zoom)
+
+	# ====================================================
+	# 7. 【新增】右键拖拽平移执行
+	# ====================================================
+	if event is InputEventMouseButton:
+		if event.button_index == MOUSE_BUTTON_RIGHT:
+			is_dragging = event.pressed # 按下为 true，松开为 false
+			
+	if event is InputEventMouseMotion and is_dragging:
+		# 提取 3D 水平方向向量
+		var forward := Vector3(transform.basis.z.x, 0.0, transform.basis.z.z).normalized()
+		var right := Vector3(transform.basis.x.x, 0.0, transform.basis.x.z).normalized()
+		
+		# 计算动态灵敏度：当相机拉得越远(spring_length越大)，拖拽应该越快，否则高空拖不动
+		var dynamic_factor: float = spring_arm.spring_length / min_zoom
+		
+		# 【已修复】明确指定 drag_vec 的类型为 Vector3，消除类型推导错误
+		# 将 2D 的 event.relative.x 和 y 分别乘进 3D 的方向向量中
+		var drag_vec: Vector3 = (-right * event.relative.x + -forward * event.relative.y) * drag_sensitivity * dynamic_factor
+		
+		# 直接应用物理位移
+		global_translate(drag_vec)
