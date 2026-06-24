@@ -1,0 +1,41 @@
+[gd_scene format=3 uid="uid://bg01t5p710gpd"]
+
+[ext_resource type="Script" uid="uid://c1lteriq5junh" path="res://camera_pivot.gd" id="1_itk02"]
+
+[sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_a1ds6"]
+sky_horizon_color = Color(0.66224277, 0.6717428, 0.6867428, 1)
+ground_horizon_color = Color(0.66224277, 0.6717428, 0.6867428, 1)
+
+[sub_resource type="Sky" id="Sky_itk02"]
+sky_material = SubResource("ProceduralSkyMaterial_a1ds6")
+
+[sub_resource type="Environment" id="Environment_uoqbt"]
+background_mode = 2
+sky = SubResource("Sky_itk02")
+glow_enabled = true
+
+[sub_resource type="PlaneMesh" id="PlaneMesh_3owqy"]
+size = Vector2(512, 512)
+subdivide_width = 512
+subdivide_depth = 512
+
+[node name="MainWorld" type="Node3D" unique_id=1983111001]
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="." unique_id=1908084993]
+environment = SubResource("Environment_uoqbt")
+
+[node name="DirectionalLight3D" type="DirectionalLight3D" parent="." unique_id=1735206013]
+transform = Transform3D(-0.8660254, -0.43301278, 0.25, 0, 0.49999997, 0.86602545, -0.50000006, 0.75, -0.43301266, 0, 0, 0)
+shadow_enabled = true
+
+[node name="TerrainMesh" type="MeshInstance3D" parent="." unique_id=998301398]
+mesh = SubResource("PlaneMesh_3owqy")
+
+[node name="CameraPivot" type="Marker3D" parent="." unique_id=492782584]
+script = ExtResource("1_itk02")
+
+[node name="SpringArm3D" type="SpringArm3D" parent="CameraPivot" unique_id=1960973505]
+transform = Transform3D(1, 0, 0, 0, 0.70710677, 0.70710677, 0, -0.70710677, 0.70710677, 0, 0, 0)
+spring_length = 60.0
+
+[node name="Camera3D" type="Camera3D" parent="CameraPivot/SpringArm3D" unique_id=59128798]
